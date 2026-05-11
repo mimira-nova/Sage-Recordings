@@ -7,6 +7,8 @@ const fs = require('fs');
 const AIRINGS_FILE = 'airing_movies_cache.json';
 const RECORDINGS_FILE = 'recorded_movies_cache.json';
 
+const CANDIDATES_CACHE = 'candidates_list.json'
+
 // Configuration: Lower number = Higher priority (1 is best, 4 is "not on list")
 const CHANNEL_PRIORITIES = {
     "1": ["895", "896", "865", "866", "869", "870", "868", "867", "873", "874", "730", "885", "887"],
@@ -67,6 +69,7 @@ function compareLibrary() {
         const airingId = airing.AiringID;
         const title = airing.AiringTitle;
         const currentAiringChan = airing.AiringChannelNumber;
+        const currentAiringName = airing.Channel.ChannelName;
         const currentPriority = airing.priority;
         const time = new Date(airing.AiringStartTime).toLocaleString();
 
@@ -75,12 +78,12 @@ function compareLibrary() {
         if (!existingRecord) {
             // Case A: Don't have it at all
             report.newContent.push({
-                title, externalId, airingId, channel: currentAiringChan, time, reason: "New"
+                title, externalId, airingId, currentAiringChan, currentAiringName, time, reason: "New"
             });
         } else if (currentPriority < existingRecord.priority) {
             // Case B: Have it, but this is an upgrade
             report.newContent.push({
-                title, externalId, airingId, channel: currentAiringChan, time,
+                title, externalId, airingId, currentAiringChan, currentAiringName, time,
                 reason: `Upgrade (Group ${currentPriority} vs Group ${existingRecord.priority})`
             });
             report.upgrades.push(`${title} (Better quality available)`);
@@ -90,7 +93,10 @@ function compareLibrary() {
         }
     });
 
-    // 4. Display summary (Same as your original code...)
+    // Sort the list using time of recording
+    report.newContent.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+    // 4. Display summary
     console.log(`\n======================================`);
     console.log(`SAGE TV MOVIE COMPARISON`);
     console.log(`======================================`);
@@ -108,19 +114,24 @@ function compareLibrary() {
         report.newContent.forEach(m => {
             const tag = m.reason.startsWith("Upgrade") ? "[↑]" : "[ ]";
             // Get the priority group for the display
-            const group = getPriority(m.channel);
+            const group = getPriority(m.currentAiringChan);
             // Outputting Title, AiringID, Channel, and Reason
             console.log(
                 `${tag.padEnd(4)} ` +
                 `${m.title.substring(0, 24).padEnd(25)} | ` +
                 `${String(m.airingId).padEnd(12)} | ` +
-                `${String(m.channel).padEnd(6)} | ` +
+                `${String(m.currentAiringChan).padEnd(6)} | ` +
+                `${String(m.currentAiringName).padEnd(10)} | ` +
                 `Grp ${group}: ${m.reason}`
             );
         });
     } else {
         console.log("No new movies or upgrades found.");
     }
+
+    // SAVE TO LOCAL STORAGE 
+    console.log(`Saving ${report.newContent.length} movies to ${CANDIDATES_CACHE}...`);
+    fs.writeFileSync(CANDIDATES_CACHE, JSON.stringify(report.newContent, null, 2));
 }
 
 compareLibrary();
